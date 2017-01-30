@@ -245,7 +245,7 @@ func visitModelNode(model interface{}, included *map[string]*Node,
 				kind = fieldType.Type.Kind()
 			}
 
-			// Handle allowed types
+			// Handle allowed ID types
 			switch kind {
 			case reflect.String:
 				node.ID = v.Interface().(string)
@@ -350,9 +350,10 @@ func visitModelNode(model interface{}, included *map[string]*Node,
 				}
 			}
 		} else if annotation == annotationRelation {
-			var omitEmpty bool
+			// Relationship
 
-			//add support for 'omitempty' struct tag for marshaling as absent
+			// 'omitempty' struct tag for marshaling as absent
+			var omitEmpty bool
 			if len(args) > 2 {
 				omitEmpty = args[2] == annotationOmitEmpty
 			}
@@ -434,6 +435,7 @@ func visitModelNode(model interface{}, included *map[string]*Node,
 			}
 
 		} else {
+			// Unknown annotation
 			er = ErrBadJSONAPIStructTag
 			break
 		}
