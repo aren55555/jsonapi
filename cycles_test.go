@@ -38,7 +38,7 @@ func testList(length int) (root *ListNode) {
 }
 
 func TestMarshal_withCycles(t *testing.T) {
-	list := testList(8)
+	list := testList(3)
 	fmt.Println(list.String())
 
 	out := bytes.NewBuffer(nil)
