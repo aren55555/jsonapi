@@ -8,8 +8,8 @@ import (
 
 type ListNode struct {
 	ID     int       `jsonapi:"primary,graph-node"`
-	Parent *ListNode `jsonapi:"relation,parent"`
-	Child  *ListNode `jsonapi:"relation,child"`
+	Parent *ListNode `jsonapi:"relation,parent,omitempty"`
+	Child  *ListNode `jsonapi:"relation,child,omitempty"`
 }
 
 func (n *ListNode) SetChild(child *ListNode) {

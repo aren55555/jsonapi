@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+type visitedMap map[uintptr]*Node
+
 var (
 	// ErrBadJSONAPIStructTag is returned when the Struct field's JSON API
 	// annotation is invalid.
@@ -54,7 +56,12 @@ func MarshalOnePayload(w io.Writer, model interface{}) error {
 func MarshalOnePayloadWithoutIncluded(w io.Writer, model interface{}) error {
 	included := make(map[string]*Node)
 
-	rootNode, err := visitModelNode(model, &included, true)
+	rootNode, err := visitModelNode(
+		model,
+		&included,
+		nil,
+		true,
+	)
 	if err != nil {
 		return err
 	}
@@ -72,7 +79,12 @@ func MarshalOnePayloadWithoutIncluded(w io.Writer, model interface{}) error {
 func MarshalOne(model interface{}) (*OnePayload, error) {
 	included := make(map[string]*Node)
 
-	rootNode, err := visitModelNode(model, &included, true)
+	rootNode, err := visitModelNode(
+		model,
+		&included,
+		nil,
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +172,12 @@ func MarshalMany(models []interface{}) (*ManyPayload, error) {
 	included := map[string]*Node{}
 
 	for _, model := range models {
-		node, err := visitModelNode(model, &included, true)
+		node, err := visitModelNode(
+			model,
+			&included,
+			nil,
+			true,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +202,12 @@ func MarshalMany(models []interface{}) (*ManyPayload, error) {
 //
 // model interface{} should be a pointer to a struct.
 func MarshalOnePayloadEmbedded(w io.Writer, model interface{}) error {
-	rootNode, err := visitModelNode(model, nil, false)
+	rootNode, err := visitModelNode(
+		model,
+		nil,
+		nil,
+		false,
+	)
 	if err != nil {
 		return err
 	}
@@ -199,14 +221,24 @@ func MarshalOnePayloadEmbedded(w io.Writer, model interface{}) error {
 	return nil
 }
 
-func visitModelNode(model interface{}, included *map[string]*Node,
-	sideload bool) (*Node, error) {
-	node := new(Node)
+func visitModelNode(
+	model interface{},
+	included *map[string]*Node,
+	visited *visitedMap,
+	sideload bool,
+) (*Node, error) {
+	node := &Node{}
+
+	if visited == nil {
+		visited = &visitedMap{}
+	}
 
 	var er error
 
 	modelValue := reflect.ValueOf(model).Elem()
 	modelType := reflect.ValueOf(model).Type().Elem()
+
+	(*visited)[modelValue.Addr().Pointer()] = node
 
 	for i := 0; i < modelValue.NumField(); i++ {
 		structField := modelValue.Type().Field(i)
@@ -379,6 +411,7 @@ func visitModelNode(model interface{}, included *map[string]*Node,
 				relationship, err := visitModelNodeRelationships(
 					fieldValue,
 					included,
+					visited,
 					sideload,
 				)
 				if err != nil {
@@ -410,9 +443,22 @@ func visitModelNode(model interface{}, included *map[string]*Node,
 					continue
 				}
 
+				// Detect if the relation is cylci
+				if relationship, alreadyVisited := (*visited)[fieldValue.Elem().Addr().Pointer()]; alreadyVisited {
+					node.Relationships[args[1]] = &RelationshipOneNode{
+						Data: &Node{
+							Type: relationship.Type,
+							ID:   relationship.ID,
+						},
+						Links: relLinks,
+					}
+					continue
+				}
+
 				relationship, err := visitModelNode(
 					fieldValue.Interface(),
 					included,
+					visited,
 					sideload,
 				)
 				if err != nil {
@@ -463,14 +509,18 @@ func toShallowNode(node *Node) *Node {
 	}
 }
 
-func visitModelNodeRelationships(models reflect.Value, included *map[string]*Node,
-	sideload bool) (*RelationshipManyNode, error) {
+func visitModelNodeRelationships(
+	models reflect.Value,
+	included *map[string]*Node,
+	visited *visitedMap,
+	sideload bool,
+) (*RelationshipManyNode, error) {
 	nodes := []*Node{}
 
 	for i := 0; i < models.Len(); i++ {
 		n := models.Index(i).Interface()
 
-		node, err := visitModelNode(n, included, sideload)
+		node, err := visitModelNode(n, included, visited, sideload)
 		if err != nil {
 			return nil, err
 		}
