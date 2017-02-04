@@ -120,7 +120,11 @@ func UnmarshalManyPayload(in io.Reader, t reflect.Type) ([]interface{}, error) {
 func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("data is not a jsonapi representation of '%v'", model.Type())
+			err = fmt.Errorf(
+				"data is not a jsonapi representation of '%v'\n\t%s",
+				model.Type(),
+				r,
+			)
 		}
 	}()
 
@@ -306,6 +310,53 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 				continue
 			}
 
+			if fieldValue.Kind() == reflect.Slice {
+				fmt.Println("Our struct field value is", fieldValue.Type())
+				fmt.Println("Our json wire value is", v)
+
+				array := reflect.New(fieldValue.Type())
+				fmt.Println(array)
+				fmt.Println(reflect.TypeOf(array).Elem())
+
+				// TODO: need to populate the array with values that are of the type
+				// contained within the array
+
+				fmt.Println(array.Elem())
+				fmt.Printf("\n%#v\n\n", array)
+				fmt.Println(
+					reflect.TypeOf(
+						array.Elem().Index(0),
+					),
+				)
+
+				for i := 0; i < v.Len(); i++ {
+					reflect.Append(array.Elem(), v.Index(i))
+				}
+				fmt.Println(array)
+
+				// fmt.Println("HERE 1", fieldValue.Type())
+				// slice := reflect.MakeSlice(
+				// 	reflect.SliceOf(fieldValue.Type()),
+				// 	0,
+				// 	0,
+				// )
+				//
+				// for i := 0; i < v.Len(); i++ {
+				// 	fmt.Println("HERE", fieldValue.Type())
+				// 	fmt.Printf("\n%#v\n\n", reflect.TypeOf(v.Index(i).Interface()).String())
+				// 	reflect.Append(slice, v.Index(i))
+				// }
+				//
+				// fmt.Printf("%#v\n", slice)
+				//
+				// values := reflect.New(slice.Type())
+				// values.Elem().Set(slice)
+				//
+				// fmt.Printf("%#v\n", values.Elem())
+
+				continue
+			}
+
 			if fieldValue.Type() == reflect.TypeOf([]string{}) {
 				values := make([]string, v.Len())
 				for i := 0; i < v.Len(); i++ {
@@ -449,8 +500,10 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 			if fieldValue.Kind() != v.Kind() {
 				return ErrInvalidType
 			}
+			fmt.Println("here")
+			fmt.Println(reflect.ValueOf(val))
 			fieldValue.Set(reflect.ValueOf(val))
-
+			fmt.Println("here2")
 		} else if annotation == annotationRelation {
 			isSlice := fieldValue.Type().Kind() == reflect.Slice
 
