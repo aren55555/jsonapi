@@ -17,12 +17,12 @@ const (
 )
 
 var (
-	// ErrInvalidTime is returned when a struct has a time.Time type field, but
+	// ErrInvalidTimeType is returned when a struct has a time.Time type field, but
 	// the JSON value was not a unix timestamp integer.
-	ErrInvalidTime = errors.New("Only numbers can be parsed as dates, unix timestamps")
+	ErrInvalidTimeType = errors.New("Only numbers and strings can be parsed as dates, unix timestamps")
 	// ErrInvalidISO8601 is returned when a struct has a time.Time type field and includes
 	// "iso8601" in the tag spec, but the JSON value was not an ISO8601 timestamp string.
-	ErrInvalidISO8601 = errors.New("Only strings can be parsed as dates, ISO8601 timestamps")
+	ErrInvalidISO8601 = errors.New("Strings must be ISO8601 timestamps to be parsed")
 	// ErrUnknownFieldNumberType is returned when the JSON value was a float
 	// (numeric) but the Struct field was a non numeric type (i.e. not int, uint,
 	// float, etc)
@@ -131,14 +131,14 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 
 	for i := 0; i < modelValue.NumField(); i++ {
 		fieldType := modelType.Field(i)
-		tag := fieldType.Tag.Get("jsonapi")
+		tag := fieldType.Tag.Get(annotationJSONAPI)
 		if tag == "" {
 			continue
 		}
 
 		fieldValue := modelValue.Field(i)
 
-		args := strings.Split(tag, ",")
+		args := strings.Split(tag, annotationSeperator)
 
 		if len(args) < 1 {
 			er = ErrBadJSONAPIStructTag
@@ -248,16 +248,6 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 				continue
 			}
 
-			var iso8601 bool
-
-			if len(args) > 2 {
-				for _, arg := range args[2:] {
-					if arg == annotationISO8601 {
-						iso8601 = true
-					}
-				}
-			}
-
 			val := attributes[args[1]]
 
 			// continue if the attribute was not included in the request
@@ -267,45 +257,41 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 
 			v := reflect.ValueOf(val)
 
-			// Handle field of type time.Time
-			if fieldValue.Type() == reflect.TypeOf(time.Time{}) {
-				if iso8601 {
-					var tm string
-					if v.Kind() == reflect.String {
-						tm = v.Interface().(string)
-					} else {
-						er = ErrInvalidISO8601
-						break
-					}
+			// The stuct field was time.Time or *time.Time
+			if fieldValue.Type() == reflect.TypeOf(time.Time{}) ||
+				fieldValue.Type() == reflect.TypeOf(&time.Time{}) {
+				var parsedTime time.Time
 
-					t, err := time.Parse(iso8601TimeFormat, tm)
+				// Time value can be either JSON numeric or string
+				switch v.Kind() {
+				case reflect.String:
+					ts := v.Interface().(string)
+					parsedTime, err = time.Parse(iso8601TimeFormat, ts)
 					if err != nil {
-						er = ErrInvalidISO8601
-						break
+						return ErrInvalidISO8601
 					}
-
-					fieldValue.Set(reflect.ValueOf(t))
-
-					continue
+				case reflect.Float64:
+					at := int64(v.Interface().(float64))
+					parsedTime = time.Unix(at, 0)
+				case reflect.Int:
+					at := v.Int()
+					parsedTime = time.Unix(at, 0)
+				default:
+					return ErrInvalidTimeType
 				}
 
-				var at int64
-
-				if v.Kind() == reflect.Float64 {
-					at = int64(v.Interface().(float64))
-				} else if v.Kind() == reflect.Int {
-					at = v.Int()
+				var timeValue reflect.Value
+				if fieldValue.Kind() == reflect.Ptr {
+					timeValue = reflect.ValueOf(&parsedTime)
 				} else {
-					return ErrInvalidTime
+					timeValue = reflect.ValueOf(parsedTime)
 				}
 
-				t := time.Unix(at, 0)
-
-				fieldValue.Set(reflect.ValueOf(t))
-
+				fieldValue.Set(timeValue)
 				continue
 			}
 
+			// Supports slices of strings
 			if fieldValue.Type() == reflect.TypeOf([]string{}) {
 				values := make([]string, v.Len())
 				for i := 0; i < v.Len(); i++ {
@@ -313,47 +299,6 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 				}
 
 				fieldValue.Set(reflect.ValueOf(values))
-
-				continue
-			}
-
-			if fieldValue.Type() == reflect.TypeOf(new(time.Time)) {
-				if iso8601 {
-					var tm string
-					if v.Kind() == reflect.String {
-						tm = v.Interface().(string)
-					} else {
-						er = ErrInvalidISO8601
-						break
-					}
-
-					v, err := time.Parse(iso8601TimeFormat, tm)
-					if err != nil {
-						er = ErrInvalidISO8601
-						break
-					}
-
-					t := &v
-
-					fieldValue.Set(reflect.ValueOf(t))
-
-					continue
-				}
-
-				var at int64
-
-				if v.Kind() == reflect.Float64 {
-					at = int64(v.Interface().(float64))
-				} else if v.Kind() == reflect.Int {
-					at = v.Int()
-				} else {
-					return ErrInvalidTime
-				}
-
-				v := time.Unix(at, 0)
-				t := &v
-
-				fieldValue.Set(reflect.ValueOf(t))
 
 				continue
 			}

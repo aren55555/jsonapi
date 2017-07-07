@@ -196,10 +196,11 @@ func TestUnmarshalInvalidJSON_BadType(t *testing.T) {
 		BadValue interface{}
 		Error    error
 	}{ // The `Field` values here correspond to the `ModelBadTypes` jsonapi fields.
-		{Field: "string_field", BadValue: 0, Error: ErrUnknownFieldNumberType},  // Expected string.
-		{Field: "float_field", BadValue: "A string.", Error: ErrInvalidType},    // Expected float64.
-		{Field: "time_field", BadValue: "A string.", Error: ErrInvalidTime},     // Expected int64.
-		{Field: "time_ptr_field", BadValue: "A string.", Error: ErrInvalidTime}, // Expected *time / int64.
+		{Field: "string_field", BadValue: 0, Error: ErrUnknownFieldNumberType},     // Expected string.
+		{Field: "float_field", BadValue: "A string.", Error: ErrInvalidType},       // Expected float64.
+		{Field: "time_field", BadValue: "A string.", Error: ErrInvalidISO8601},     // Expected int64.
+		{Field: "time_ptr_field", BadValue: "A string.", Error: ErrInvalidISO8601}, // Expected *time / int64.
+		{Field: "time_ptr_field", BadValue: map[string]string{"bad": "type"}, Error: ErrInvalidTimeType},
 	}
 	for _, test := range badTypeTests {
 		t.Run(fmt.Sprintf("Test_%s", test.Field), func(t *testing.T) {

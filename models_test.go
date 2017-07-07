@@ -29,6 +29,7 @@ type Timestamp struct {
 	ID   int        `jsonapi:"primary,timestamps"`
 	Time time.Time  `jsonapi:"attr,timestamp,iso8601"`
 	Next *time.Time `jsonapi:"attr,next,iso8601"`
+	Year *time.Time `jsonapi:"attr,year,omitempty,"`
 }
 
 type Car struct {
